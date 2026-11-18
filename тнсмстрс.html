@@ -1,0 +1,1081 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Tennis 2D Masters Neon Pro - Double BG</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #030308;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: monospace;
+    }
+    #wrap {
+      position: relative;
+      user-select: none;
+    }
+    canvas {
+      display: block;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.2);
+      background: #050512;
+      border: 2px solid #00f2fe;
+      border-radius: 4px;
+    }
+    #hud {
+      background: #050512;
+      color: #6c7a9c;
+      font-size: 11px;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      width: 1000px;
+      border-bottom-left-radius: 6px;
+      border-bottom-right-radius: 6px;
+      border: 2px solid #1f1f42;
+      border-top: none;
+    }
+    #hud b {
+      color: #00f2fe;
+    }
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 4, 12, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      gap: 10px;
+    }
+    #overlay h2 {
+      font-size: 36px;
+      letter-spacing: 5px;
+      color: #00f2fe;
+    }
+    #overlay p {
+      font-size: 13px;
+      color: #a2b4d4;
+      line-height: 1.7;
+      text-align: center;
+      max-width: 650px;
+      background: rgba(12, 12, 28, 0.8);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #1f1f42;
+    }
+    #overlay button {
+      margin-top: 15px;
+      padding: 14px 50px;
+      background: #4a3faa;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    #overlay button:hover {
+      background: #00f2fe;
+      color: #050512;
+      transform: scale(1.05);
+    }
+    .modeBtn {
+      padding: 10px 28px;
+      background: #1a1a3a;
+      color: #6c7a9c;
+      border: 1px solid #2a2a5a;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      font-weight: bold;
+      transition: 0.2s;
+      font-family: monospace;
+    }
+    .modeBtn:hover { background: #2a2a5a; color: #fff; }
+    .modeBtn.active-mode {
+      background: #4a3faa;
+      color: #fff;
+      border-color: #00f2fe;
+      box-shadow: 0 0 12px rgba(0,242,254,0.3);
+    }
+  </style>
+</head>
+<body>
+
+<div id="wrap">
+  <canvas id="gc" width="1000" height="460"></canvas>
+  <div id="hud">
+    <span><b>P1:</b> A/D (Double tap — DASH) • W — прыжок • Q/E — ВИНТЫ • R — МЯГКИЙ • Z/X — HIT/СМЭШ</span>
+    <span id="dbg">Ожидание старта</span>
+    <span><b>P2:</b> Стрелки (Double tap — DASH) • Numpad 4/5 — Удары • Numpad 7/6 — ВИНТЫ • Num 3 — МЯГКИЙ</span>
+  </div>
+  <div id="overlay">
+    <h2>TENNIS MASTERS 2D</h2>
+    <div id="modeSelect" style="display:flex;gap:16px;margin-top:8px;">
+      <button id="btnPvP" class="modeBtn active-mode">👥 ИГРОК VS ИГРОК</button>
+    </div>
+    <p id="controlsInfo">
+      <b>УПРАВЛЕНИЕ ИГРОКАМИ (Симметричный киберспортивный сплит):</b><br><br>
+      • <b>Игрок 1 (Слева):</b> <br>
+      Движение: <b>A / D</b> (Двойной тап — Рывок/Dash), <b>W</b> (Прыжок)<br>
+      Удары: <b>Z</b> (HIT), <b>X</b> (СМЭШ) | Винты: <b>Q / E</b> | Мягкий удар: <b>R</b><br><br>
+      • <b>Игрок 2 (Справа):</b><br>
+      Движение: <b>Стрелочки (← / →)</b> (Двойной тап — Рывок/Dash), Прыжок: <b>Стрелочка (↑)</b><br>
+      Удары: <b>4</b> (HIT), <b>5</b> (СМЭШ) | Винты: <b>7 / 6</b> | Мягкий удар: <b>3 (Numpad)</b>
+    </p>
+    <button id="startBtn">ИГРАТЬ</button>
+  </div>
+</div>
+
+<script>
+const C = document.getElementById('gc');
+const ctx = C.getContext('2d');
+const W = 1000, H = 460;
+const GROUND = H - 65;
+const NET_X = W / 2;
+const NET_H = 55;
+const NET_TOP_DEFAULT = GROUND - NET_H + 10;
+const BALL_R = 7;
+const COURT_LEFT = 80;
+const COURT_RIGHT = W - 80;
+
+const PW = 24, PH = 48;
+const RACKET_L = 32;
+
+let gameMode = 'pvp';
+
+const GRAVITY = 0.16;
+const PLAYER_GRAV = 0.42;
+const BOUNCE_Y = 0.72;
+const BOUNCE_X = 0.93;
+const AIR_RESIST = 0.993;
+
+let netFlexX = 0;
+let netFlexY = 0;
+
+let keys = {}, prevKeys = {};
+
+const lastTap = {
+  'KeyA': 0, 'KeyD': 0,
+  'ArrowLeft': 0, 'ArrowRight': 0
+};
+const DOUBLE_TAP_DELAY = 280;
+
+let currentServer = 0;
+let servesInARow = 0;
+
+const farBuildings = [];
+const buildings = [];
+
+for (let i = 0; i < 10; i++) {
+  const bW = 80 + Math.random() * 120;
+  const bH = 200 + Math.random() * 220;
+  farBuildings.push({
+    x: i * 110 - 50, w: bW, h: bH,
+    color: Math.random() > 0.5 ? '#09091a' : '#060614',
+    lineColor: 'rgba(50, 50, 90, 0.1)'
+  });
+}
+
+for (let i = 0; i < 15; i++) {
+  const bW = 50 + Math.random() * 70;
+  const bH = 150 + Math.random() * 180;
+  buildings.push({
+    x: i * 70 - 30, w: bW, h: bH,
+    color: Math.random() > 0.5 ? '#111130' : '#0d0d24',
+    lineColor: Math.random() > 0.5 ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255, 0, 127, 0.15)'
+  });
+}
+
+window.addEventListener('keydown', e => {
+  if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS'].includes(e.code)) {
+    e.preventDefault();
+  }
+
+  if (!keys[e.code] && ['KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+    const now = performance.now();
+    if (now - lastTap[e.code] < DOUBLE_TAP_DELAY) {
+      triggerDash(e.code);
+    }
+    lastTap[e.code] = now;
+  }
+
+  keys[e.code] = true;
+  if (e.code === 'Numpad4') keys['P2_HIT'] = true;
+  if (e.code === 'Numpad5') keys['P2_SMASH'] = true;
+  if (e.code === 'Numpad7') keys['P2_SPIN_TOP'] = true;
+  if (e.code === 'Numpad6') keys['P2_SPIN_BACK'] = true;
+  if (e.code === 'Numpad9') keys['P2_SOFT'] = true;
+});
+
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Numpad4') keys['P2_HIT'] = false;
+  if (e.code === 'Numpad5') keys['P2_SMASH'] = false;
+  if (e.code === 'Numpad7') keys['P2_SPIN_TOP'] = false;
+  if (e.code === 'Numpad6') keys['P2_SPIN_BACK'] = false;
+  if (e.code === 'Numpad9') keys['P2_SOFT'] = false;
+});
+
+function pressed(k) { return keys[k] && !prevKeys[k]; }
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+function triggerDash(code) {
+  if (gameState !== 'play') return;
+
+  let pIndex = (code === 'KeyA' || code === 'KeyD') ? 0 : 1;
+  let p = P[pIndex];
+
+  const pLocked = (ball.holder === pIndex && ball.tossTimer === 0);
+  if (pLocked || p.dashCooldownTimer > 0 || p.dashActiveTimer > 0) return;
+
+  let dir = (code === 'KeyD' || code === 'ArrowRight') ? 1 : -1;
+
+  p.dashActiveTimer = 10;
+  p.dashCooldownTimer = 7 * 60;
+  p.dashDir = dir;
+}
+
+let score = [0, 0];
+let ball, P;
+let msgText = '', msgTimer = 0;
+let gameState = 'menu';
+let isLockRound = false;
+
+function initRound(server) {
+  isLockRound = false;
+  netFlexX = 0;
+  netFlexY = 0;
+  const p1StartX = 30;
+  const p2StartX = W - 30;
+  const startX = server === 0 ? p1StartX : p2StartX;
+
+  P = [mkPlayer(0, server === 0 ? p1StartX : 130), mkPlayer(1, server === 1 ? p2StartX : W - 130)];
+
+  ball = {
+    x: startX,
+    y: GROUND - 140,
+    vx: 0, vy: 0,
+    inPlay: false,
+    lastHit: server,
+    bounces: 0,
+    lastBounceSide: -1,
+    hitEnemyHalf: false,
+    holder: server,
+    tossTimer: 0,
+    dots: [],
+    _dotTick: 0,
+    _crossedNet: false,
+    spin: 0
+  };
+}
+
+function mkPlayer(side, x) {
+  return {
+    x, y: GROUND - PH,
+    vx: 0, vy: 0,
+    onGround: true,
+    side,
+    angle: side === 0 ? -Math.PI * 0.4 : -Math.PI * 0.6,
+    swingActive: false,
+    swingType: null,
+    swingPhase: 0,
+    hitDone: false,
+    col: side === 0 ? '#00f2fe' : '#ff007f',
+    spinState: 'none',
+    softActive: false,
+    dashActiveTimer: 0,
+    dashCooldownTimer: 0,
+    dashDir: 0
+  };
+}
+
+function startSwing(p, type) {
+  if (ball.holder === p.side && ball.tossTimer === 0) return;
+
+  if (type === 'smash' && ball.inPlay && ball.y >= NET_TOP_DEFAULT) return;
+  if (p.swingActive) return;
+
+  p.swingActive = true;
+  p.swingType = type;
+  p.swingPhase = 0;
+  p.hitDone = false;
+
+  if (type === 'hit') {
+    p.angle = p.side === 0 ? Math.PI * 0.8 : Math.PI * 0.2;
+  } else {
+    p.angle = p.side === 0 ? -Math.PI * 0.1 : -Math.PI * 0.9;
+  }
+}
+
+function updateSwing(p) {
+  const targetIdle = p.side === 0 ? -Math.PI * 0.4 : -Math.PI * 0.6;
+  if (!p.swingActive) {
+    p.angle += (targetIdle - p.angle) * 0.15;
+    return;
+  }
+  const spd = p.swingType === 'smash' ? 0.35 : 0.25;
+  const dir = p.side === 0 ? -1 : 1;
+  p.angle += dir * spd;
+  p.swingPhase += spd;
+
+  if (p.swingPhase >= Math.PI * 1.4) {
+    p.swingActive = false;
+    p.swingPhase = 0;
+    p.softActive = false;
+  }
+}
+
+function tryHit(p, type) {
+  if (p.hitDone) return;
+
+  const racketX = p.x + Math.cos(p.angle) * RACKET_L;
+  const racketY = (p.y + PH * 0.4) + Math.sin(p.angle) * RACKET_L;
+
+  const dx = ball.x - racketX;
+  const dy = ball.y - racketY;
+  const distToRacket = Math.sqrt(dx * dx + dy * dy);
+
+  const pCenterX = p.x;
+  const pCenterY = p.y + PH / 2;
+  const lookDir = p.side === 0 ? 1 : -1;
+
+  const relativeX = (ball.x - pCenterX) * lookDir;
+  const isBallInFront = relativeX > 0;
+  const isBallBehind = relativeX <= 0;
+  const isBallAbove = ball.y < p.y;
+
+  let racketLimit = 48;
+  if (isBallAbove) racketLimit = 34;
+
+  if (isBallInFront) {
+    const compressedDist = Math.sqrt(Math.pow(ball.x - pCenterX, 2) * 2.7 + Math.pow(ball.y - pCenterY, 2) * 1.4);
+    if (compressedDist > 55 && distToRacket > racketLimit) return;
+  } else {
+    const compressedDistBack = Math.sqrt(Math.pow(ball.x - pCenterX, 2) + Math.pow(ball.y - pCenterY, 2) * 1.6);
+    if (compressedDistBack > 55 && distToRacket > racketLimit) return;
+  }
+
+  if (type === 'smash' && ball.y >= NET_TOP_DEFAULT) {
+    p.swingActive = false;
+    p.softActive = false;
+    return;
+  }
+
+  p.hitDone = true;
+  const wasServing = (ball.inPlay === false && ball.tossTimer > 0);
+  ball.inPlay = true;
+  ball.holder = -1;
+  ball.tossTimer = 0;
+  ball.bounces = 0;
+  ball.lastHit = p.side;
+  ball.hitEnemyHalf = false;
+  ball.dots = [];
+
+  const dir = p.side === 0 ? 1 : -1;
+  const distToNet = Math.abs(ball.x - NET_X);
+  let distanceFactor = clamp(distToNet / 400, 0.1, 1.0);
+
+  let spinCutPenalty = false;
+  const incomingSpinReflected = ball.spin * dir;
+  if (incomingSpinReflected > 1.2 && type === 'smash') {
+    spinCutPenalty = true;
+  }
+
+  let appliedSpin = 0;
+  if (p.spinState === 'top') appliedSpin = 1;
+  if (p.spinState === 'back') appliedSpin = -1;
+
+  if (appliedSpin !== 0) {
+    ball.spin = appliedSpin * dir * 4.2;
+  } else {
+    ball.spin = ball.spin * 0.1;
+  }
+
+  p.spinState = 'none';
+  ball.vx = 0; ball.vy = 0;
+
+  if (spinCutPenalty) {
+    ball.vx = dir * 1.8;
+    ball.vy = 9.0;
+    ball.spin = 0;
+    p.softActive = false;
+    return;
+  }
+
+  const useSoft = p.softActive;
+  p.softActive = false;
+
+  if (type === 'hit') {
+    if (wasServing) {
+      let serveVx = 9.5 + distanceFactor * 1.5;
+      let serveVy = -5.4;
+
+      if (appliedSpin === 1) { serveVy -= 1.2; serveVx += 1.0; }
+      if (appliedSpin === -1) { serveVy -= 0.4; serveVx -= 0.5; }
+
+      ball.vx = dir * serveVx;
+      ball.vy = serveVy;
+    }
+    else if (isBallBehind) {
+      let behindVx = 4.2 + (distToNet * 0.008);
+      let behindVy = -7.5 - (distToNet * 0.012);
+
+      if (appliedSpin === -1) {
+        behindVx *= 1.1;
+        behindVy -= 1.0;
+      }
+
+      ball.vx = dir * (behindVx + Math.abs(p.vx) * 0.2);
+      ball.vy = behindVy;
+    }
+    else if (relativeX <= 14) {
+      let closeVx = 9.0 + (distToNet * 0.005);
+      let closeVy = -4.8 - (distToNet * 0.003);
+
+      if (appliedSpin === 1) { closeVy -= 1.5; closeVx += 1.0; }
+      if (appliedSpin === -1) { closeVy += 0.5; closeVx -= 0.5; }
+
+      ball.vx = dir * (closeVx + Math.abs(p.vx) * 0.1);
+      ball.vy = closeVy;
+    }
+    else {
+      let rawOffsetX = (ball.x - p.x) * dir;
+      let offsetX = clamp(rawOffsetX, -20, 30);
+      let arcFactor = 1.0 - (offsetX + 20) / 50;
+
+      let baseVx = 10.5 + (1.0 - arcFactor) * 4.2;
+      let baseVy = -2.4 - arcFactor * 4.0;
+
+      if (appliedSpin === 1) {
+        baseVy -= 2.6;
+        baseVx += 1.5;
+      }
+
+      if (appliedSpin === -1) {
+        baseVx = 12.0;
+        baseVy = -3.2;
+        if (distToNet > 200) {
+          baseVx += (distToNet - 200) * 0.006;
+          baseVy -= (distToNet - 200) * 0.003;
+        }
+      }
+
+      const tToNet = distToNet / baseVx;
+      if (tToNet > 0 && appliedSpin !== 1) {
+        const targetNetY = NET_TOP_DEFAULT - 22;
+        const expectedYAtNet = ball.y + baseVy * tToNet + 0.5 * GRAVITY * tToNet * tToNet;
+        if (expectedYAtNet > targetNetY) {
+          baseVy = (targetNetY - ball.y - 0.5 * GRAVITY * tToNet * tToNet) / tToNet;
+        }
+      }
+
+      ball.vx = dir * (baseVx + Math.abs(p.vx) * 0.15);
+      ball.vy = baseVy - Math.max(0, -p.vy) * 0.1;
+    }
+
+    if (useSoft) {
+      ball.vx *= 0.5;
+      ball.vy *= 0.5;
+      ball.vy -= 2.5;
+    }
+  }
+  else {
+    let proximityToNet = clamp(1.0 - (distToNet / 420), 0.0, 1.0);
+    if (distToNet < 140) {
+      let liftFactor = (140 - distToNet) / 140;
+      ball.y = Math.min(ball.y, NET_TOP_DEFAULT - 30 * liftFactor);
+    }
+
+    if (!p.onGround) {
+      let smashVx = 12.5 + distanceFactor * 5.5;
+      let smashVy = 4.0 - distanceFactor * 3.0;
+      if (appliedSpin === 1) smashVy -= 1.5;
+
+      let timingBonus = clamp(1.0 - (Math.abs(p.swingPhase - 0.72) / 0.5), 0.0, 1.0);
+      smashVx += timingBonus * 3.0;
+      smashVy += timingBonus * 0.5;
+
+      if (wasServing) {
+        smashVy = 1.2; smashVx = 14.5 + distanceFactor * 4.0;
+      }
+      smashVx -= proximityToNet * 4.25;
+      smashVy += proximityToNet * 5.75;
+
+      ball.vx = dir * (smashVx + Math.abs(p.vx) * 0.2);
+      ball.vy = smashVy;
+    }
+    else {
+      let smashVx = 12.8 + distanceFactor * 3.0;
+      let smashVy = -2.2;
+      if (appliedSpin === 1) smashVy -= 1.5;
+
+      if (wasServing) {
+        smashVy = -2.8;
+        smashVx = 14.0;
+      }
+
+      smashVx -= proximityToNet * 2.75;
+      smashVy += proximityToNet * 3.5;
+
+      ball.vx = dir * smashVx;
+      ball.vy = smashVy;
+    }
+
+    if (useSoft) {
+      ball.vx *= 0.5;
+      ball.vy *= 0.5;
+    }
+  }
+}
+
+function update() {
+  if (gameState !== 'play') { prevKeys = {...keys}; return; }
+
+  netFlexX *= 0.68;
+  netFlexY *= 0.68;
+
+  const [p0, p1] = P;
+  const moveSpd = 3.2;
+  const dashSpd = 14.0;
+
+  const p0Locked = (ball.holder === 0 && ball.tossTimer === 0);
+  const p1Locked = (ball.holder === 1 && ball.tossTimer === 0);
+
+  P.forEach(p => {
+    if (p.dashActiveTimer > 0) {
+      p.dashActiveTimer--;
+      p.vx = p.dashDir * dashSpd;
+    } else {
+      const isLocked = p.side === 0 ? p0Locked : p1Locked;
+      if (p.side === 0) {
+        p.vx = isLocked ? 0 : ((keys['KeyA'] ? -moveSpd : 0) + (keys['KeyD'] ? moveSpd : 0));
+      } else {
+        p.vx = isLocked ? 0 : ((keys['ArrowLeft'] ? -moveSpd : 0) + (keys['ArrowRight'] ? moveSpd : 0));
+      }
+    }
+
+    if (p.dashCooldownTimer > 0) {
+      p.dashCooldownTimer--;
+    }
+  });
+
+  p0.x += p0.vx; p1.x += p1.vx;
+  p0.x = clamp(p0.x, PW/2 + 10, NET_X - PW/2 - 20);
+  p1.x = clamp(p1.x, NET_X + PW/2 + 20, W - PW/2 - 10);
+
+  if (keys['KeyW'] && p0.onGround && !p0Locked) { p0.vy = -10.5; p0.onGround = false; }
+  if (keys['ArrowUp'] && p1.onGround && !p1Locked) { p1.vy = -10.5; p1.onGround = false; }
+
+  if (pressed('KeyQ')) p0.spinState = (p0.spinState === 'top') ? 'none' : 'top';
+  if (pressed('KeyE')) p0.spinState = (p0.spinState === 'back') ? 'none' : 'back';
+
+  if (pressed('P2_SPIN_TOP')) p1.spinState = (p1.spinState === 'top') ? 'none' : 'top';
+  if (pressed('P2_SPIN_BACK')) p1.spinState = (p1.spinState === 'back') ? 'none' : 'back';
+
+  if (pressed('KeyR')) p0.softActive = !p0.softActive;
+  if (pressed('P2_SOFT')) p1.softActive = !p1.softActive;
+
+  if (ball.holder === 0 && ball.tossTimer === 0) {
+    if (pressed('KeyZ') || pressed('KeyX')) {
+      ball.tossTimer = 1; ball.vy = -9.7; ball.vx = 0;
+      prevKeys = {...keys}; return;
+    }
+  }
+  if (gameMode === 'pvp' && ball.holder === 1 && ball.tossTimer === 0) {
+    if (pressed('P2_HIT') || pressed('P2_SMASH')) {
+      ball.tossTimer = 1; ball.vy = -9.7; ball.vx = 0;
+      prevKeys = {...keys}; return;
+    }
+  }
+
+  if (pressed('KeyZ')) startSwing(p0, 'hit');
+  if (pressed('KeyX')) startSwing(p0, 'smash');
+  if (gameMode === 'pvp') {
+    if (pressed('P2_HIT')) startSwing(p1, 'hit');
+    if (pressed('P2_SMASH')) startSwing(p1, 'smash');
+  }
+
+  P.forEach(p => {
+    if (!p.onGround) {
+      p.vy += PLAYER_GRAV; p.y += p.vy;
+      if (p.y >= GROUND - PH) { p.y = GROUND - PH; p.vy = 0; p.onGround = true; }
+    }
+  });
+
+  P.forEach(p => {
+    updateSwing(p);
+    if (p.swingActive) tryHit(p, p.swingType);
+  });
+
+  if (!ball.inPlay && ball.holder >= 0) {
+    const p = P[ball.holder];
+    if (ball.tossTimer === 0) { ball.x = p.x; ball.y = p.y - 15; }
+  }
+
+  if (ball.inPlay || ball.tossTimer > 0) {
+    if (ball.holder === -1) {
+      const bDir = ball.vx > 0 ? 1 : -1;
+      const spinRelative = ball.spin * bDir;
+
+      if (spinRelative > 0) {
+        if ((bDir > 0 && ball.x > NET_X) || (bDir < 0 && ball.x < NET_X)) {
+          ball.vy += spinRelative * 0.085;
+        } else {
+          ball.vy += spinRelative * 0.015;
+        }
+      }
+    }
+
+    let oldX = ball.x;
+    let oldY = ball.y;
+
+    ball.vy += GRAVITY;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    ball.vx *= AIR_RESIST;
+    ball.vy *= AIR_RESIST;
+
+    ball._dotTick++;
+    if (ball._dotTick % 2 === 0) {
+      ball.dots.push({x: ball.x, y: ball.y});
+      if (ball.dots.length > 8) ball.dots.shift();
+    }
+
+    const ballSide = ball.x < NET_X ? 0 : 1;
+    const oldBallSide = oldX < NET_X ? 0 : 1;
+
+    if (ballSide === 1) ball._crossedNet = false;
+
+    if (ball.y - BALL_R <= 0) {
+      ball.y = BALL_R; ball.vy = Math.abs(ball.vy) * BOUNCE_Y;
+    }
+
+    if (ball.x - BALL_R < 0 || ball.x + BALL_R > W) {
+      if(!isLockRound) {
+        if (ball.hitEnemyHalf) pointTo(ball.lastHit, "Противник пропустил удар!");
+        else pointTo(ball.lastHit === 0 ? 1 : 0, "Аут за поле!");
+      }
+      return;
+    }
+
+    if (ball.y + BALL_R >= GROUND) {
+      ball.y = GROUND - BALL_R;
+      ball.vy = -Math.abs(ball.vy) * BOUNCE_Y;
+
+      ball.vx += ball.spin * 1.1;
+      ball.vx *= BOUNCE_X;
+      ball.spin *= 0.2;
+      ball.bounces++;
+
+      if (ball.tossTimer > 0) {
+        ball.tossTimer = 0; ball.vx = 0; ball.vy = 0; ball.holder = ball.lastHit;
+        P[ball.holder].x = ball.holder === 0 ? 30 : W - 30;
+        P[ball.holder].y = GROUND - PH;
+        P[ball.holder].vy = 0;
+        P[ball.holder].onGround = true;
+      }
+      else if (ball.inPlay && !isLockRound) {
+        const isInsideCourt = (ball.x >= COURT_LEFT && ball.x <= COURT_RIGHT);
+        if (ball.bounces === 1) {
+          if (!isInsideCourt) {
+            pointTo(ball.lastHit === 0 ? 1 : 0, "Аут (За линию)!");
+          }
+          else if (ballSide === ball.lastHit) {
+            pointTo(ball.lastHit === 0 ? 1 : 0, "Удар в своё поле!");
+          }
+          else {
+            ball.hitEnemyHalf = true;
+          }
+          ball.lastBounceSide = ballSide;
+        }
+        else if (ball.bounces >= 2) {
+          if (ball.hitEnemyHalf) pointTo(ball.lastHit, "Двойной отскок!");
+          else pointTo(ball.lastHit === 0 ? 1 : 0, "Аут!");
+        }
+      }
+    }
+
+    let currentNetTop = NET_TOP_DEFAULT + netFlexY;
+    let currentNetX = NET_X + netFlexX;
+
+    let directionBefore = (ball.vx !== 0) ? (ball.vx > 0 ? 1 : -1) : (oldX < NET_X ? 1 : -1);
+
+    let hitNet = false;
+    let ratio = 0.5;
+
+    if (directionBefore > 0) {
+      if (oldX + BALL_R <= NET_X && ball.x + BALL_R >= NET_X) {
+        hitNet = true;
+        ratio = (NET_X - (oldX + BALL_R)) / ((ball.x - oldX) || 1);
+      }
+    } else {
+      if (oldX - BALL_R >= NET_X && ball.x - BALL_R <= NET_X) {
+        hitNet = true;
+        ratio = ((oldX - BALL_R) - NET_X) / ((oldX - ball.x) || 1);
+      }
+    }
+
+    if (!hitNet && ball.y + BALL_R > currentNetTop) {
+      if (directionBefore > 0 && ball.x + BALL_R >= NET_X && oldX < NET_X) {
+        hitNet = true;
+        ratio = 0.5;
+      } else if (directionBefore < 0 && ball.x - BALL_R <= NET_X && oldX > NET_X) {
+        hitNet = true;
+        ratio = 0.5;
+      }
+    }
+
+    if (hitNet) {
+      ratio = clamp(ratio, 0, 1);
+      let intersectY = oldY + (ball.y - oldY) * ratio;
+
+      if (intersectY + BALL_R > currentNetTop) {
+
+        const hitInTopPart = (intersectY - BALL_R < currentNetTop + 10) && ball.vy > 0;
+
+        if (hitInTopPart) {
+          let speedHorizontal = Math.abs(ball.vx);
+          netFlexY += clamp(ball.vy * 0.4 + speedHorizontal * 0.15, 0, 8);
+          netFlexX += ball.vx * 0.2;
+
+          ball.vx *= 0.6;
+          ball.vy = -1.2;
+
+          ball.x = directionBefore > 0 ? NET_X + BALL_R + 3 : NET_X - BALL_R - 3;
+        } else {
+          ball.vx = -ball.vx * 0.33;
+          ball.vy *= 0.65;
+          ball.spin *= -0.2;
+
+          ball.x = directionBefore > 0 ? NET_X - BALL_R - 3 : NET_X + BALL_R + 3;
+
+          netFlexX += directionBefore > 0 ? 5 : -5;
+        }
+        ball.bounces = 0;
+      }
+    }
+  }
+
+  let dbgElement = document.getElementById('dbg');
+  if (!ball.inPlay && ball.holder >= 0) {
+    dbgElement.innerText = ball.tossTimer === 0 ? `Подача Игрока P${ball.holder + 1} (${2 - servesInARow} ост.)` : `Мяч подброшен`;
+  } else {
+    let spinType = ball.spin > 0.8 ? " (Топ-спин)" : (ball.spin < -0.8 ? " (Подрезка)" : "");
+    dbgElement.innerText = `Мяч в игре • Последний удар: P${ball.lastHit + 1}${spinType}`;
+  }
+
+  if (msgTimer > 0) msgTimer--;
+  prevKeys = {...keys};
+}
+
+function pointTo(winner, reason) {
+  isLockRound = true; ball.inPlay = false;
+  score[winner]++;
+  msgText = `${reason} ➔ Очко P${winner + 1}`;
+  msgTimer = 120;
+
+  servesInARow++;
+
+  let totalPoints = score[0] + score[1];
+  let targetServes = (totalPoints === 1) ? 1 : 2;
+
+  if (servesInARow >= targetServes) {
+    currentServer = currentServer === 0 ? 1 : 0;
+    servesInARow = 0;
+  }
+
+  if (score[winner] >= 7 && Math.abs(score[0] - score[1]) >= 2) {
+    setTimeout(() => endGame(winner), 1200);
+  } else {
+    setTimeout(() => { initRound(currentServer); }, 1500);
+  }
+}
+
+function endGame(winner) {
+  gameState = 'menu';
+
+  const ov = document.getElementById('overlay');
+  const winnerName = `Игрок P${winner + 1}`;
+  ov.innerHTML = `<h2>🏆 ПОБЕДИЛ ${winnerName}!</h2>
+    <p style="font-size:20px; color:#fff; letter-spacing:2px; margin: 10px 0;">Финальный счет: ${score[0]} : ${score[1]}</p>
+    <button id="startBtn">РЕВАНШ</button>`;
+  ov.style.display = 'flex';
+  document.getElementById('startBtn').addEventListener('click', startGame);
+}
+
+function startGame() {
+  score = [0, 0];
+  currentServer = 0;
+  servesInARow = 0;
+  initRound(currentServer);
+  gameState = 'play';
+  document.getElementById('overlay').style.display = 'none';
+
+  const hudSpans = document.querySelectorAll('#hud span');
+  hudSpans[0].innerHTML = '<b>P1:</b> A/D (Double tap — DASH) • W — прыжок • Q/E — ВИНТЫ • R — МЯГКИЙ • Z/X — HIT/СМЭШ';
+  hudSpans[2].innerHTML = '<b>P2:</b> Стрелки (Double tap — DASH) • Numpad 4/5 — Удары • Numpad 7/6 — ВИНТЫ • Num 3 — МЯГКИЙ';
+}
+
+document.getElementById('btnPvP').addEventListener('click', () => {
+  gameMode = 'pvp';
+  document.getElementById('btnPvP').classList.add('active-mode');
+  document.getElementById('controlsInfo').style.display = 'block';
+});
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+function drawBG() {
+  ctx.fillStyle = '#04040c';
+  ctx.fillRect(0, 0, W, H);
+
+  farBuildings.forEach(b => {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(b.x, GROUND - b.h, b.w, b.h);
+
+    ctx.strokeStyle = b.lineColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(b.x, GROUND);
+    ctx.lineTo(b.x, GROUND - b.h);
+    ctx.lineTo(b.x + b.w, GROUND - b.h);
+    ctx.lineTo(b.x + b.w, GROUND);
+    ctx.stroke();
+  });
+
+  buildings.forEach(b => {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(b.x, GROUND - b.h, b.w, b.h);
+
+    ctx.strokeStyle = b.lineColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(b.x, GROUND);
+    ctx.lineTo(b.x, GROUND - b.h);
+    ctx.lineTo(b.x + b.w, GROUND - b.h);
+    ctx.lineTo(b.x + b.w, GROUND);
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = '#0a0a1f';
+  ctx.fillRect(0, GROUND, W, H - GROUND);
+
+  ctx.fillStyle = '#03030b';
+  ctx.fillRect(0, GROUND, COURT_LEFT, H - GROUND);
+  ctx.fillRect(COURT_RIGHT, GROUND, W - COURT_RIGHT, H - GROUND);
+
+  ctx.strokeStyle = '#00f2fe';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(COURT_LEFT, GROUND); ctx.lineTo(COURT_LEFT, H - 10);
+  ctx.moveTo(COURT_RIGHT, GROUND); ctx.lineTo(COURT_RIGHT, H - 10);
+  ctx.moveTo(COURT_LEFT, GROUND); ctx.lineTo(COURT_RIGHT, GROUND);
+  ctx.moveTo(COURT_LEFT, H - 10); ctx.lineTo(COURT_RIGHT, H - 10);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ff007f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(NET_X, GROUND); ctx.lineTo(NET_X, H - 10);
+  ctx.stroke();
+
+  let currentNetTop = NET_TOP_DEFAULT + netFlexY;
+  let currentNetX = NET_X + netFlexX;
+
+  ctx.fillStyle = '#1a1a3a';
+  ctx.beginPath();
+  ctx.moveTo(NET_X - 4, GROUND);
+  ctx.lineTo(NET_X + 4, GROUND);
+  ctx.lineTo(currentNetX + 4, currentNetTop);
+  ctx.lineTo(currentNetX - 4, currentNetTop);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.save();
+  ctx.shadowBlur = 4;
+  ctx.shadowColor = '#00f2fe';
+  ctx.strokeStyle = 'rgba(0, 242, 254, 0.9)';
+  ctx.lineWidth = 1.2;
+
+  for (let y = NET_TOP_DEFAULT + 6; y < GROUND; y += 6) {
+    let t = (GROUND - y) / NET_H;
+    let curX = NET_X + netFlexX * t;
+    let curY = GROUND - (GROUND - y) * (1 - netFlexY / NET_H);
+    ctx.beginPath();
+    ctx.moveTo(curX - 4, curY);
+    ctx.lineTo(curX + 4, curY);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0, 242, 254, 0.7)';
+  for(let xOff = -2; xOff <= 2; xOff += 2) {
+    ctx.beginPath();
+    ctx.moveTo(NET_X + xOff, GROUND);
+    ctx.lineTo(currentNetX + xOff, currentNetTop);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = '#fff';
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(currentNetX - 4.5, currentNetTop, 9, 5);
+  ctx.restore();
+}
+
+function drawPlayer(p) {
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.ellipse(p.x, GROUND + 2, PW * 0.6, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  const barW = 32;
+  const barH = 5;
+  const barX = p.x - barW / 2;
+  const barY = p.y - 14;
+
+  ctx.fillStyle = 'rgba(31, 31, 66, 0.6)';
+  ctx.fillRect(barX, barY, barW, barH);
+
+  if (p.dashCooldownTimer > 0) {
+    let pct = 1.0 - (p.dashCooldownTimer / (7 * 60));
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(barX, barY, barW * pct, barH);
+  } else {
+    ctx.save();
+    ctx.fillStyle = '#00ffaa';
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = '#00ffaa';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.restore();
+  }
+
+  if (p.softActive) {
+    ctx.save();
+    ctx.fillStyle = '#00ff33';
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#00ff33';
+    ctx.fillRect(p.x - 16, GROUND + 12, 32, 4);
+    ctx.restore();
+  }
+
+  if (p.dashActiveTimer > 0) {
+    ctx.fillStyle = p.side === 0 ? 'rgba(0, 242, 254, 0.25)' : 'rgba(255, 0, 127, 0.25)';
+    ctx.fillRect(p.x - p.dashDir * 14 - PW/2, p.y, PW, PH);
+    ctx.fillRect(p.x - p.dashDir * 28 - PW/2, p.y, PW, PH);
+  }
+
+  if (p.spinState !== 'none') {
+    ctx.save();
+    ctx.lineWidth = 3;
+    if (p.spinState === 'top') {
+      ctx.strokeStyle = '#ff3333';
+      ctx.shadowBlur = 12; ctx.shadowColor = '#ff3333';
+    } else {
+      ctx.strokeStyle = '#3399ff';
+      ctx.shadowBlur = 12; ctx.shadowColor = '#3399ff';
+    }
+    ctx.strokeRect(p.x - 18, GROUND - 3, 36, 6);
+    ctx.restore();
+  }
+
+  ctx.fillStyle = p.col;
+  ctx.fillRect(p.x - PW/2, p.y, PW, PH);
+
+  ctx.fillStyle = '#fff';
+  const eyeOffset = p.side === 0 ? 5 : -9;
+  ctx.fillRect(p.x + eyeOffset, p.y + 6, 4, 4);
+
+  const pivX = p.x;
+  const pivY = p.y + PH * 0.4;
+  const tipX = pivX + Math.cos(p.angle) * RACKET_L;
+  const tipY = pivY + Math.sin(p.angle) * RACKET_L;
+
+  ctx.strokeStyle = '#555577'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(pivX, pivY); ctx.lineTo(tipX, tipY); ctx.stroke();
+
+  ctx.strokeStyle = p.col; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.ellipse(tipX, tipY, 10, 6, p.angle, 0, Math.PI * 2); ctx.stroke();
+}
+
+function drawBall() {
+  ball.dots.forEach((d, i) => {
+    ctx.globalAlpha = (i / ball.dots.length) * 0.3;
+    ctx.fillStyle = '#ccff00';
+    ctx.beginPath(); ctx.arc(d.x, d.y, BALL_R * 0.9, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalAlpha = 1.0;
+
+  if(ball.y < GROUND) {
+    const shadowSize = clamp(BALL_R * (1 - (GROUND - ball.y)/280), 2, BALL_R);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.arc(ball.x, GROUND + 1, shadowSize, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+  ctx.fillStyle = '#ccff00'; ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+
+  if (Math.abs(ball.spin) > 0.5) {
+    ctx.strokeStyle = ball.spin > 0 ? '#ff3333' : '#3399ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (ball.spin > 0) ctx.arc(ball.x, ball.y, BALL_R - 2, -Math.PI*0.3, Math.PI*0.3);
+    else ctx.arc(ball.x, ball.y, BALL_R - 2, Math.PI*0.7, Math.PI*1.3);
+    ctx.stroke();
+  }
+}
+
+function drawHUD() {
+  ctx.fillStyle = 'rgba(5, 5, 18, 0.85)';
+  ctx.beginPath(); ctx.roundRect(W/2 - 80, 12, 160, 45, 6); ctx.fill();
+
+  ctx.textAlign = 'center'; ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#6c7a9c';
+  ctx.fillText('ИГРОК 1', W/2 - 40, 26);
+  ctx.fillText('ИГРОК 2', W/2 + 40, 26);
+
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = '#00f2fe'; ctx.fillText(score[0], W/2 - 40, 48);
+  ctx.fillStyle = '#ff007f'; ctx.fillText(score[1], W/2 + 40, 48);
+
+  if (msgTimer > 0) {
+    ctx.globalAlpha = Math.min(1, msgTimer / 15);
+    ctx.fillStyle = 'rgba(4, 4, 12, 0.95)';
+    ctx.beginPath(); ctx.roundRect(W/2 - 220, H/2 - 35, 440, 50, 8); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px monospace';
+    ctx.fillText(msgText, W/2, H/2 + -4);
+    ctx.globalAlpha = 1.0;
+  }
+}
+
+function loop() {
+  update();
+  ctx.clearRect(0, 0, W, H);
+  drawBG();
+  P.forEach(drawPlayer);
+  if (ball) drawBall();
+  drawHUD();
+  requestAnimationFrame(loop);
+}
+
+initRound(0);
+loop();
+</script>
+</body>
+</html>
